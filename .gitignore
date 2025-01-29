@@ -9,3 +9,4 @@ smart_app_data.csv
 *.pyc
 .idea
 models/
+my-update/trial_data
