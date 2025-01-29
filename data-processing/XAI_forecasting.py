@@ -2,12 +2,15 @@ import torch
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
-from aix360.algorithms.lime import LimeTabularExplainer
+#from aix360.algorithms.lime import LimeTabularExplainer
 from typing import Union, Any, List, Tuple
 import random
 from datetime import datetime, timedelta
 import xgboost as xgb
 import time
+from lemon import LemonExplainer, gaussian_kernel
+from scipy.special import gammainccinv
+from sklearn.linear_model import Ridge
 
 class ForecastExplainer:
     def __init__(
@@ -24,7 +27,7 @@ class ForecastExplainer:
         Args:
             model (Any): A trained forecasting model (PyTorch nn.Module or sklearn/xgboost model).
             training_data (Union[np.ndarray, torch.Tensor]): Training data of shape (num_samples, seq_length).
-                Used for LIME explanations, residuals mode, and bootstrap noise estimation.
+                Used for LEMON explanations, residuals mode, and bootstrap noise estimation.
             training_outputs (Union[np.ndarray, torch.Tensor], optional): Training outputs of shape (num_samples,).
                 Required only when use_residuals is True. Defaults to None.
             use_residuals (bool): Whether to calculate bounds using residuals. Default is False.
@@ -208,10 +211,7 @@ class ForecastExplainer:
         num_features: int = 10
     ) -> List[Tuple[str, float]]:
         """
-        Generate a LIME explanation for the model's prediction on input_data.
-
-        A new LimeTabularExplainer is instantiated dynamically with updated feature names
-        corresponding to the current input sequence.
+        Generate a LEMON explanation for the model's prediction on input_data.
 
         Args:
             input_data (np.ndarray): Input data of shape (seq_length,).
@@ -241,23 +241,24 @@ class ForecastExplainer:
             else:
                 outputs = self.model.predict(data)
             return outputs.flatten()
+        
+        # Let's make a lemonade
+        # Same kernel as LIME!!!
+        DIMENSIONS = len(input_data_flat)
+        kernel_width = np.sqrt(DIMENSIONS) * .75
+        p = 0.99
+        kernel = lambda x: gaussian_kernel(x, kernel_width)
+        radius = kernel_width * np.sqrt(2 * gammainccinv(DIMENSIONS / 2, (1 - p)))
 
-        # Instantiate a new LimeTabularExplainer for the current labels
-        explainer = LimeTabularExplainer(
+        lemon_explainer = LemonExplainer(
             training_data=self.training_data,
-            feature_names=input_labels,  # Use the current labels directly
-            mode='regression',
-            verbose=False
-        )
-
-        exp = explainer.explain_instance(
-            input_data_flat,
-            predict_fn,
-            num_features=num_features,
-            num_samples=1000
-        )
-
-        explanation = exp.as_list()
+            radius_max=radius,
+            distance_kernel=kernel,
+            random_state=42
+            )
+        
+        exp = lemon_explainer.explain_instance(input_data_flat, predict_fn, surrogate=Ridge(fit_intercept=True, random_state=123))[0]
+        explanation = [(label, value) for label, value in zip(input_labels[:num_features], exp.feature_contribution)]
         return explanation
 
     def predict_and_explain(
@@ -285,7 +286,7 @@ class ForecastExplainer:
             input_data (Union[np.ndarray, torch.Tensor]): Initial input sequence of shape (seq_length,).
             n_predictions (int): Number of autoregressive predictions to make.
             input_labels (List[str]): Labels corresponding to the input_data.
-            num_features (int, optional): Number of features for LIME explanation. Default is 10.
+            num_features (int, optional): Number of features for LEMON explanation. Default is 10.
             confidence (float, optional): Confidence level for interval estimation. Default is 0.95.
             n_samples (int, optional): Number of bootstrap samples for uncertainty estimation. Must be >=100 for meaningful confidence. Default is 100.
             use_mean_pred (bool, optional): If True and in bootstrap mode, use mean of bootstrap 
@@ -304,7 +305,7 @@ class ForecastExplainer:
                 'Lower_bound' (List[float]): List of lower bounds.
                 'Upper_bound' (List[float]): List of upper bounds.
                 'Confidence_score' (List[float]): List of confidence levels used.
-                'Lime_explaination' (List[List[Tuple[str,float]]]): LIME explanations per step.
+                'lemon_explaination' (List[List[Tuple[str,float]]]): LEMON explanations per step.
                 'Date_prediction' (List[str]): Predicted date labels for each step.
         """
         if isinstance(input_data, torch.Tensor):
@@ -314,7 +315,7 @@ class ForecastExplainer:
         lower_bounds = []
         upper_bounds = []
         confidence_scores = []
-        lime_explanations = []
+        lemon_explanations = []
         date_predictions = []
 
         current_input = input_data.copy()
@@ -337,7 +338,7 @@ class ForecastExplainer:
             lower_bounds.append(lower_bound)
             upper_bounds.append(upper_bound)
             confidence_scores.append(confidence_level)
-            lime_explanations.append(explanation)
+            lemon_explanations.append(explanation)
 
             # Update the input_data and labels for the next step
             current_input = np.append(current_input[1:], final_pred)
@@ -352,7 +353,7 @@ class ForecastExplainer:
             'Lower_bound': lower_bounds,
             'Upper_bound': upper_bounds,
             'Confidence_score': confidence_scores,
-            'Lime_explaination': lime_explanations,
+            'lemon_explanation': lemon_explanations,
             'Date_prediction': date_predictions
         }
 
@@ -360,115 +361,7 @@ class ForecastExplainer:
 
 
 def main():
-    """
-    Main entry point to demonstrate the ForecastExplainer class.
-
-    This function:
-    - Generates a synthetic sine wave dataset with noise.
-    - Trains an XGBoost model for forecasting.
-    - Instantiates ForecastExplainer (which internally creates a LimeTabularExplainer).
-    - Uses the ForecastExplainer to predict and explain forecast steps.
-    - Plots the results for both bootstrap mode and residual-based bounds.
-
-    Args:
-        None
-
-    Returns:
-        None
-    """
-    # Seed
-    np.random.seed(42)
-    torch.manual_seed(42)
-    random.seed(42)
-
-    # Generate a sine wave
-    total_points = 300
-    seq_length = 50
-    t = np.linspace(0, 10 * np.pi, total_points)
-    data = np.sin(t) + np.random.normal(0, 0.05, size=total_points)
-
-    # Prepare training data for XGBoost: predict next value from last seq_length values
-    X_train = []
-    y_train = []
-    for i in range(total_points - seq_length - 1):
-        X_train.append(data[i:i + seq_length])
-        y_train.append(data[i + seq_length])
-
-    X_train = np.array(X_train)
-    y_train = np.array(y_train)
-
-    # Train XGBoost model
-    model = xgb.XGBRegressor(n_estimators=100, max_depth=3, learning_rate=0.05, random_state=42)
-    model.fit(X_train, y_train)
-
-    # Perform predictions beyond the training range
-    n_predictions = 20
-    input_data = data[(total_points - seq_length - n_predictions): (total_points - n_predictions)]
-
-    # Generate labels for the input_data
-    start_date = datetime(2020, 1, 1)
-    input_labels = [(start_date + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(seq_length)]
-
-    # Bootstrap mode
-    start_time_bootstrap = time.time()
-    explainer_bootstrap = ForecastExplainer(model, X_train, y_train, use_residuals=False)
-    results_bootstrap = explainer_bootstrap.predict_and_explain(
-        input_data=input_data,
-        n_predictions=n_predictions,
-        input_labels=input_labels,
-        num_features=5,
-        confidence=0.95,
-        n_samples=100,
-        use_mean_pred=False
-    )
-    end_time_bootstrap = time.time()
-
-    # Residuals mode
-    start_time_residuals = time.time()
-    explainer_residuals = ForecastExplainer(model, X_train, y_train, use_residuals=True)
-    results_residuals = explainer_residuals.predict_and_explain(
-        input_data=input_data,
-        n_predictions=n_predictions,
-        input_labels=input_labels,
-        num_features=5,
-        confidence=0.95,
-        n_samples=100,
-        use_mean_pred=False
-    )
-    end_time_residuals = time.time()
-
-    # Plot the results as subplots in the same figure
-    time_indices = np.arange(len(input_data), len(input_data) + n_predictions)
-    
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
-    
-    # Bootstrap mode subplot
-    ax1.plot(np.arange(len(input_data)), input_data, label='Input Data', marker='o')
-    ax1.plot(time_indices, results_bootstrap['Predicted_value'], 'r-', label='Predicted value')
-    ax1.plot(time_indices, results_bootstrap['Lower_bound'], 'g--', label='Lower bound')
-    ax1.plot(time_indices, results_bootstrap['Upper_bound'], 'b--', label='Upper bound')
-    ax1.set_title("Forecasting with Bootstrap Mode")
-    ax1.set_xlabel("Time Steps")
-    ax1.set_ylabel("Value")
-    ax1.grid(True)
-    ax1.legend()
-
-    # Residuals mode subplot
-    ax2.plot(np.arange(len(input_data)), input_data, label='Input Data', marker='o')
-    ax2.plot(time_indices, results_residuals['Predicted_value'], 'r-', label='Predicted value')
-    ax2.plot(time_indices, results_residuals['Lower_bound'], 'g--', label='Lower bound')
-    ax2.plot(time_indices, results_residuals['Upper_bound'], 'b--', label='Upper bound')
-    ax2.set_title("Forecasting with Residuals Mode")
-    ax2.set_xlabel("Time Steps")
-    ax2.set_ylabel("Value")
-    ax2.grid(True)
-    ax2.legend()
-
-    plt.tight_layout()  # Adjust spacing between subplots
-    plt.show()
-
-    print(f"Time taken (Bootstrap Mode): {end_time_bootstrap - start_time_bootstrap:.2f} seconds")
-    print(f"Time taken (Residuals Mode): {end_time_residuals - start_time_residuals:.2f} seconds")
+    print()
 
 if __name__ == '__main__':
     main()

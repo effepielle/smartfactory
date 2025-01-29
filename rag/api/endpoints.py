@@ -244,8 +244,8 @@ async def handle_predictions(json_body):
 
     if response['success'] == True:
         for item in response['data']['value']:
-            if 'Lime_explaination' in item:
-                del item['Lime_explaination']
+            if 'lemon_explanation' in item:
+                del item['lemon_explanation']
 
         response = ",".join(json.dumps(obj) for obj in response['data']['value'])
     else:
@@ -289,8 +289,8 @@ async def handle_report(json_objs):
 
     if predictor_response['success'] == True:
         for item in predictor_response['data']['value']:
-            if 'Lime_explaination' in item:
-                del item['Lime_explaination']
+            if 'lemon_explanation' in item:
+                del item['lemon_explanation']
 
         predictor_response = ",".join(json.dumps(obj) for obj in predictor_response['data']['value'])
     else:

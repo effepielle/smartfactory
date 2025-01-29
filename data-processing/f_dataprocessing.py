@@ -15,6 +15,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from model import Severity, Alert
 from math import isnan
+import pickle
 
 import json
 import os
@@ -572,7 +573,21 @@ def XAI_PRED(data,Last_date, model, total_points, seq_length = 10, n_predictions
   """
   np.random.seed(42)
 
-  # Prepare training data for XGBoost: predict next value from last seq_length values
+  trial_parameters = {
+      'data': data,
+      'Last_date': Last_date,
+      'total_points': total_points,
+      'seq_length': seq_length,
+      'n_predictions': n_predictions
+  }
+
+  model.save_model('xgb_model.json')
+  print("Trial SAVED!")
+
+  # save the trial parameters in a pickle file
+  with open('trial_parameters.pkl', 'wb') as f:
+    pickle.dump(trial_parameters, f)
+
   X_train = []
   y_train = []
   for i in range(total_points - seq_length - 1):
@@ -642,7 +657,7 @@ def make_prediction(machine, kpi, length):
     # input_data: Union[np.ndarray, torch.Tensor]
     # n_predictions: int
     # input_labels = ['YYYY-MM-DD', 'YYYY-MM-DD']
-    # Predicted_value, Lower_bound, Upper_bound, Confidence_score, Lime_explaination = explainer.predict_and_explain(input_data, n_predictions, input_labels)
+    # Predicted_value, Lower_bound, Upper_bound, Confidence_score, lemon_explanation = explainer.predict_and_explain(input_data, n_predictions, input_labels)
     # Model MUST be able to do prediction = model.predict(input_data) <- predict should return a single value
 
     pred_ARIMA = rolling_forecast(

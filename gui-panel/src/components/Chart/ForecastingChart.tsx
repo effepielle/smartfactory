@@ -72,7 +72,7 @@ const ForeChart: React.FC<ForeChartProps> = ({
                                              }) => {
     const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
 
-    const explanationData = futureDataEx?.limeExplanation;
+    const explanationData = futureDataEx?.lemonExplanation;
     const futureData = futureDataEx?.toChartData() || [];
 
     // remaps historical data to match the chart data format

@@ -10,7 +10,7 @@ import asyncio
 
 from api_auth.api_auth import get_verify_api_key
 
-from model import Json_out, Json_in, Json_out_el, LimeExplainationItem, Severity
+from model import Json_out, Json_in, Json_out_el, LemonExplanationItem, Severity
 from dotenv import load_dotenv
 from pathlib import Path
 from typing import List
@@ -143,7 +143,7 @@ def predict(JSONS: Json_in, api_key: str = Depends(get_verify_api_key(["ai-agent
         Lower_bound: List[float] -> list of upper certainty bounds
         Upper_bound: List[float] -> list of lower certainty bounds
         Confidence_score: List[float] -> chance to actually find the value inside the bounds
-        Lime_explaination: List[float] -> explaination of which components contribute more to the prediction
+        lemon_explanation: List[float] -> explaination of which components contribute more to the prediction
         Measure_unit: str -> unit of the KPI
         Date_prediction: List[str] -> list of dates regarding the predicted values
         Forecast: bool
@@ -162,7 +162,7 @@ def predict(JSONS: Json_in, api_key: str = Depends(get_verify_api_key(["ai-agent
                 Lower_bound=[],
                 Upper_bound=[],
                 Confidence_score=[],
-                Lime_explaination=[],
+                lemon_explanation=[],
                 Measure_unit="",
                 Date_prediction=[],
                 Error_message="",
@@ -196,10 +196,10 @@ def predict(JSONS: Json_in, api_key: str = Depends(get_verify_api_key(["ai-agent
                                 json_out_el.Measure_unit = KPI_data["unit_measure"]
                                 json_out_el.Confidence_score = result['Confidence_score']
 
-                                Lime_exp = []
-                                for exp in result['Lime_explaination']:
-                                    Lime_exp.append([LimeExplainationItem(date_info=item[0], value=item[1]) for item in exp])
-                                json_out_el.Lime_explaination = Lime_exp
+                                lemon_exp = []
+                                for exp in result['lemon_explanation']:
+                                    lemon_exp.append([LemonExplanationItem(date_info=item[0], value=item[1]) for item in exp])
+                                json_out_el.lemon_explanation = lemon_exp
                                 json_out_el.Date_prediction = result['Date_prediction']  
                             else:
                                 if status == -1:
@@ -228,7 +228,7 @@ def predict(JSONS: Json_in, api_key: str = Depends(get_verify_api_key(["ai-agent
         Lower_bound=[],
         Upper_bound=[],
         Confidence_score=[],
-        Lime_explaination=[],
+        lemon_explanation=[],
         Measure_unit="",
         Date_prediction=[],
         Error_message="Received input is not valid",

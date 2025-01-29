@@ -12,6 +12,7 @@ aix360
 lime
 minio
 python-dotenv
+lemon-explainer==0.0.3
 
 psycopg2-binary
 passlib==1.7.4

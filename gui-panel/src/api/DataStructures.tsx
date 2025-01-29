@@ -385,7 +385,7 @@ export class DashboardFolder {
 }
 
 // Data structure for decoding the forecast data from the API and displaying it in the ForeChart
-class LimeData {
+class LemonData {
 
     feature: string;
     importance: number;
@@ -395,7 +395,7 @@ class LimeData {
         this.importance = importance;
     }
 
-    static decode(json: Record<string, any>): LimeData {
+    static decode(json: Record<string, any>): LemonData {
         if (typeof json.date_info !== "string") {
             throw new Error("Invalid type for feature", json.date_info);
         }
@@ -403,11 +403,11 @@ class LimeData {
             throw new Error("Invalid type for importance", json.value);
         }
 
-        return new LimeData(json.date_info, json.value);
+        return new LemonData(json.date_info, json.value);
     }
 
-    static decodeArray(json: Record<string, any>): LimeData[] {
-        return json.map(LimeData.decode);
+    static decodeArray(json: Record<string, any>): LemonData[] {
+        return json.map(LemonData.decode);
     }
 }
 
@@ -418,19 +418,19 @@ export class ForecastDataEx {
     lowerBound: number[]
     upperBound: number[]
     confidenceScore: number[]
-    limeExplanation: LimeData[][]
+    lemonExplanation: LemonData[][]
     measureUnit: string
     datePrediction: string[]
     forecast: boolean
 
-    constructor(machineName: string, kpiName: string, predictedValue: number[], lowerBound: number[], upperBound: number[], confidenceScore: number[], limeExplanation: LimeData[][], measureUnit: string, datePrediction: string[], forecast: boolean) {
+    constructor(machineName: string, kpiName: string, predictedValue: number[], lowerBound: number[], upperBound: number[], confidenceScore: number[], lemonExplanation: LemonData[][], measureUnit: string, datePrediction: string[], forecast: boolean) {
         this.machineName = machineName;
         this.kpiName = kpiName;
         this.predictedValue = predictedValue;
         this.lowerBound = lowerBound;
         this.upperBound = upperBound;
         this.confidenceScore = confidenceScore;
-        this.limeExplanation = limeExplanation;
+        this.lemonExplanation = lemonExplanation;
         this.measureUnit = measureUnit;
         this.datePrediction = datePrediction;
         this.forecast = forecast;
@@ -474,8 +474,8 @@ export class ForecastDataEx {
         if (!Array.isArray(json.Confidence_score)) {
             throw new Error("Invalid type for Confidence_score");
         }
-        if (!Array.isArray(json.Lime_explaination)) {
-            throw new Error("Invalid type for Lime_explanation");
+        if (!Array.isArray(json.lemon_explanation)) {
+            throw new Error("Invalid type for lemon_explanation");
         }
         if (typeof json.Measure_unit !== "string") {
             throw new Error("Invalid type for Measure_unit");
@@ -487,6 +487,6 @@ export class ForecastDataEx {
             throw new Error("Invalid type for Forecast");
         }
 
-        return new ForecastDataEx(json.Machine_Name, json.KPI_Name, json.Predicted_value, json.Lower_bound, json.Upper_bound, json.Confidence_score, json.Lime_explaination.map(LimeData.decodeArray), json.Measure_unit, json.Date_prediction, json.Forecast);
+        return new ForecastDataEx(json.Machine_Name, json.KPI_Name, json.Predicted_value, json.Lower_bound, json.Upper_bound, json.Confidence_score, json.lemon_explanation.map(LemonData.decodeArray), json.Measure_unit, json.Date_prediction, json.Forecast);
     }
 }
